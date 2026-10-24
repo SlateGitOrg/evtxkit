@@ -309,8 +309,9 @@ mod tests {
         assert_eq!(c.top(3), vec![("a", 2), ("b", 2), ("c", 1)]);
         let mut d = Counter::default();
         d.add("c");
+        d.add("c");
         d.merge(&c);
-        assert_eq!(d.top(1), vec![("c", 2)]);
+        assert_eq!(d.top(1), vec![("c", 3)]);
         assert_eq!(d.distinct(), 4);
     }
 

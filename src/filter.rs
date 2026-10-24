@@ -9,8 +9,9 @@
 //! ```
 //!
 //! Semantics follow Sigma: string comparison is case-insensitive unless
-//! `|cased` is given; a plain `=` value may use `*` and `?` wildcards (escape
-//! with `\`); `|in` splits the value on commas and matches any item; `|exists`
+//! `|cased` is given; a plain `=` value may use `*` and `?` wildcards (a
+//! backslash escapes `*`, `?` and `\` and is literal otherwise, as in Sigma);
+//! `|in` splits the value on commas and matches any item; `|exists`
 //! takes `true`/`false`. Ordering operators compare numerically (decimal or
 //! `0x` hex) and ignore non-numeric values. A field with several values
 //! matches if any value matches; `!=` is the negation of `=`.
@@ -70,10 +71,18 @@ pub struct Filter {
 
 fn parse_glob(pattern: &str) -> Vec<GlobTok> {
     let mut out = Vec::with_capacity(pattern.len());
-    let mut chars = pattern.chars();
+    let mut chars = pattern.chars().peekable();
     while let Some(c) = chars.next() {
         out.push(match c {
-            '\\' => GlobTok::Char(chars.next().unwrap_or('\\')),
+            // Sigma escaping: `\` only escapes `*`, `?` and itself; any other
+            // backslash is literal, so Windows paths need no doubling.
+            '\\' => match chars.peek() {
+                Some(&n @ ('*' | '?' | '\\')) => {
+                    chars.next();
+                    GlobTok::Char(n)
+                }
+                _ => GlobTok::Char('\\'),
+            },
             '*' => GlobTok::Star,
             '?' => GlobTok::Any,
             c => GlobTok::Char(c),
@@ -416,5 +425,9 @@ mod tests {
         assert!(t("**a", "a"));
         assert!(!t("?", ""));
         assert!(t("\\", "\\"));
+        assert!(t("a\\\\b", "a\\b"), "escaped backslash");
+        assert!(t("C:\\Windows\\x*", "C:\\Windows\\xyz"), "plain backslashes are literal");
+        assert!(t("C:\\dir\\\\*", "C:\\dir\\abc"), "`\\\\*` = backslash then wildcard");
+        assert!(!t("a\\?", "ab"));
     }
 }

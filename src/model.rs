@@ -229,13 +229,13 @@ mod tests {
         assert_eq!(id.attr("Qualifiers").as_deref(), Some("0"));
         assert_eq!(id.attr("Missing"), None);
         assert!(event.find("System/Nope").is_none());
-        assert_eq!(event.child("Data").unwrap().text(), "a&BC&nbsp;");
+        assert_eq!(event.child("Data").unwrap().text(), "a&Bc&nbsp;");
         assert!(event.has_element_children());
         assert!(!id.has_element_children());
         assert_eq!(event.element_count(), 4);
         let mut all = String::new();
         Node::Element(event).write_text(&mut all);
-        assert_eq!(all, "4624a&BC&nbsp;");
+        assert_eq!(all, "4624a&Bc&nbsp;");
     }
 
     #[test]
