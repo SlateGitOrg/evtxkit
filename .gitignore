@@ -1,0 +1,6 @@
+/target
+/tools/refdump/target
+*.profraw
+*.profdata
+/lcov.info
+.DS_Store
