@@ -414,7 +414,11 @@ impl<'a> ChunkContext<'a> {
     }
 
     /// Parses a template instance (after its 0x0C token) and instantiates it.
-    fn parse_template_instance(&mut self, cur: &mut Cursor<'a>, depth: usize) -> Result<Vec<Element>> {
+    fn parse_template_instance(
+        &mut self,
+        cur: &mut Cursor<'a>,
+        depth: usize,
+    ) -> Result<Vec<Element>> {
         cur.skip(1)?; // unknown, usually 1
         let _template_id = cur.u32()?;
         let def_offset = cur.u32()? as usize;

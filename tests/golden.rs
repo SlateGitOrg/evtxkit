@@ -47,7 +47,11 @@ fn check_sample(name: &str) -> (usize, usize) {
             // Records found by resynchronising after a framing error are extra
             // relative to the reference, which abandons the rest of such chunks.
             Ok(r) if r.recovered => recovered += 1,
-            Ok(r) => ours.push((r.record_id, r.timestamp.unix_nanos(), common::canonical(&r.root))),
+            Ok(r) => ours.push((
+                r.record_id,
+                r.timestamp.unix_nanos(),
+                common::canonical(&r.root),
+            )),
             Err(e) => our_errors.push(e.to_string()),
         }
     }
@@ -66,7 +70,12 @@ fn check_sample(name: &str) -> (usize, usize) {
         golden.records.len(),
         ours.len(),
         mismatches.len(),
-        mismatches.iter().take(3).cloned().collect::<Vec<_>>().join("\n")
+        mismatches
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
     );
     (ours.len(), recovered)
 }

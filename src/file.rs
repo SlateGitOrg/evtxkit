@@ -179,20 +179,21 @@ impl EvtxFile {
     ///
     /// Corrupt chunks surface as a single [`RecordError`] each.
     pub fn records(&self) -> impl Iterator<Item = std::result::Result<Record, RecordError>> + '_ {
-        self.chunks().flat_map(|slot| -> Box<dyn Iterator<Item = _>> {
-            match slot {
-                ChunkSlot::Chunk(chunk) => Box::new(chunk.records()),
-                ChunkSlot::Empty { .. } => Box::new(std::iter::empty()),
-                ChunkSlot::Corrupt { index, error } => {
-                    Box::new(std::iter::once(Err(RecordError {
-                        chunk_index: index,
-                        file_offset: FILE_HEADER_SIZE + index * CHUNK_SIZE,
-                        record_id: None,
-                        error,
-                    })))
+        self.chunks()
+            .flat_map(|slot| -> Box<dyn Iterator<Item = _>> {
+                match slot {
+                    ChunkSlot::Chunk(chunk) => Box::new(chunk.records()),
+                    ChunkSlot::Empty { .. } => Box::new(std::iter::empty()),
+                    ChunkSlot::Corrupt { index, error } => {
+                        Box::new(std::iter::once(Err(RecordError {
+                            chunk_index: index,
+                            file_offset: FILE_HEADER_SIZE + index * CHUNK_SIZE,
+                            record_id: None,
+                            error,
+                        })))
+                    }
                 }
-            }
-        })
+            })
     }
 }
 

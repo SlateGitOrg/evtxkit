@@ -157,14 +157,21 @@ mod tests {
         let ft = FileTime(secs as u64 * TICKS_PER_SEC);
         assert_eq!(ft.to_iso(Precision::Micros), "2000-02-29T00:00:00.000000Z");
         // Largest FILETIME renders without panicking (year 60056).
-        assert!(FileTime(u64::MAX).to_iso(Precision::Ticks).starts_with("60056-"));
+        assert!(
+            FileTime(u64::MAX)
+                .to_iso(Precision::Ticks)
+                .starts_with("60056-")
+        );
     }
 
     #[test]
     fn civil_round_trip_sample() {
         for days in [-719_468i64, -1, 0, 59, 365, 10_957, 2_932_896] {
             let (y, m, d) = civil_from_days(days);
-            assert!((1..=12).contains(&m) && (1..=31).contains(&d), "{y}-{m}-{d}");
+            assert!(
+                (1..=12).contains(&m) && (1..=31).contains(&d),
+                "{y}-{m}-{d}"
+            );
         }
         assert_eq!(civil_from_days(0), (1970, 1, 1));
         assert_eq!(civil_from_days(-1), (1969, 12, 31));

@@ -40,7 +40,11 @@ pub enum TemplateValue {
 }
 
 /// Instantiates `root` with `values`, spending at most `budget` nodes.
-pub fn instantiate(root: &Element, values: &[TemplateValue], budget: usize) -> Result<Vec<Element>> {
+pub fn instantiate(
+    root: &Element,
+    values: &[TemplateValue],
+    budget: usize,
+) -> Result<Vec<Element>> {
     let mut inst = Instantiator {
         values,
         remaining: budget,
@@ -65,9 +69,7 @@ fn count_nodes(nodes: &[Node]) -> usize {
     nodes
         .iter()
         .map(|n| match n {
-            Node::Element(e) => {
-                1 + e.attributes.len() + count_nodes(&e.children)
-            }
+            Node::Element(e) => 1 + e.attributes.len() + count_nodes(&e.children),
             _ => 1,
         })
         .sum()

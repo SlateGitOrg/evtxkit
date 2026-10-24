@@ -81,7 +81,11 @@ impl fmt::Display for Sid {
         let authority = u64::from_be_bytes([0, 0, a0, a1, a2, a3, a4, a5]);
         write!(f, "S-{revision}-{authority}")?;
         for sub in subs.chunks_exact(4).take(usize::from(sub_count)) {
-            write!(f, "-{}", u32::from_le_bytes([sub[0], sub[1], sub[2], sub[3]]))?;
+            write!(
+                f,
+                "-{}",
+                u32::from_le_bytes([sub[0], sub[1], sub[2], sub[3]])
+            )?;
         }
         Ok(())
     }
@@ -392,7 +396,11 @@ mod tests {
             (ty::INT32, (-7i32).to_le_bytes().to_vec(), "-7"),
             (ty::UINT32, 4624u32.to_le_bytes().to_vec(), "4624"),
             (ty::INT64, (-9i64).to_le_bytes().to_vec(), "-9"),
-            (ty::UINT64, u64::MAX.to_le_bytes().to_vec(), "18446744073709551615"),
+            (
+                ty::UINT64,
+                u64::MAX.to_le_bytes().to_vec(),
+                "18446744073709551615",
+            ),
             (ty::REAL32, 1.5f32.to_le_bytes().to_vec(), "1.5"),
             (ty::REAL64, 0.25f64.to_le_bytes().to_vec(), "0.25"),
             (ty::BOOL, 1u32.to_le_bytes().to_vec(), "true"),
@@ -400,13 +408,21 @@ mod tests {
             (ty::BOOL, vec![2], "true"),
             (ty::BINARY, vec![0xde, 0xad, 0x01], "DEAD01"),
             (ty::HEX_INT32, 0x20u32.to_le_bytes().to_vec(), "0x20"),
-            (ty::HEX_INT64, 0x8020_0000_0000_0000u64.to_le_bytes().to_vec(), "0x8020000000000000"),
+            (
+                ty::HEX_INT64,
+                0x8020_0000_0000_0000u64.to_le_bytes().to_vec(),
+                "0x8020000000000000",
+            ),
             (ty::SIZE_T, 0x10u32.to_le_bytes().to_vec(), "0x10"),
             (ty::SIZE_T, 0x0u64.to_le_bytes().to_vec(), "0x0"),
             (ty::NULL, vec![], ""),
         ];
         for (t, bytes, want) in cases {
-            assert_eq!(Value::decode(t, &bytes, 0).unwrap().to_text(), want, "type {t:#x}");
+            assert_eq!(
+                Value::decode(t, &bytes, 0).unwrap().to_text(),
+                want,
+                "type {t:#x}"
+            );
         }
     }
 
@@ -414,7 +430,10 @@ mod tests {
     fn strings_guid_sid_time() {
         let mut s = utf16("SYSTEM");
         s.extend_from_slice(&[0, 0, b'x', 0]);
-        assert_eq!(Value::decode(ty::STRING, &s, 0).unwrap().to_text(), "SYSTEM");
+        assert_eq!(
+            Value::decode(ty::STRING, &s, 0).unwrap().to_text(),
+            "SYSTEM"
+        );
         assert_eq!(
             Value::decode(ty::ANSI_STRING, &[b'a', 0x80, 0x81, 0xe9, 0, b'z'], 0)
                 .unwrap()
@@ -430,7 +449,10 @@ mod tests {
             "54849625-5478-4994-A5BA-3E3B0328C30D"
         );
         let sid = [1u8, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0];
-        assert_eq!(Value::decode(ty::SID, &sid, 0).unwrap().to_text(), "S-1-5-18");
+        assert_eq!(
+            Value::decode(ty::SID, &sid, 0).unwrap().to_text(),
+            "S-1-5-18"
+        );
         assert_eq!(Value::decode(ty::SID, &[1, 2], 0).unwrap().to_text(), "S-?");
         let ft = 131_124_751_716_816_408u64.to_le_bytes();
         assert_eq!(
@@ -464,9 +486,13 @@ mod tests {
         assert_eq!(v.to_text(), "x,yz");
         let v = Value::decode(ty::SIZE_T | ARRAY_FLAG, &[0u8; 16], 0).unwrap();
         assert_eq!(v.to_text(), "0x0,0x0");
-        let sids = [1u8, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 5];
+        let sids = [
+            1u8, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 5,
+        ];
         assert_eq!(
-            Value::decode(ty::SID | ARRAY_FLAG, &sids, 0).unwrap().to_text(),
+            Value::decode(ty::SID | ARRAY_FLAG, &sids, 0)
+                .unwrap()
+                .to_text(),
             "S-1-5-18,S-1-5"
         );
         assert!(Value::decode(ty::SID | ARRAY_FLAG, &[1u8, 9, 0, 0, 0, 0, 0, 5], 0).is_err());
@@ -483,7 +509,10 @@ mod tests {
         assert!(Value::decode(ty::SIZE_T, &[1, 2], 0).is_err());
         assert!(matches!(
             Value::decode(ty::EVT_HANDLE, &[], 3),
-            Err(EvtxError::UnsupportedValueType { value_type: 0x20, offset: 3 })
+            Err(EvtxError::UnsupportedValueType {
+                value_type: 0x20,
+                offset: 3
+            })
         ));
         assert!(Value::Null.is_empty());
         assert!(Value::String(String::new()).is_empty());
