@@ -11,6 +11,11 @@ fn escape_into(out: &mut String, s: &str, attribute: bool) {
             '<' => out.push_str("&lt;"),
             '>' => out.push_str("&gt;"),
             '"' if attribute => out.push_str("&quot;"),
+            // C0 controls (other than tab/LF/CR) become character references so
+            // hostile log content cannot drive a terminal (e.g. ESC sequences).
+            c if (c as u32) < 0x20 && !matches!(c, '\t' | '\n' | '\r') => {
+                let _ = write!(out, "&#x{:x};", c as u32);
+            }
             c => out.push(c),
         }
     }
@@ -138,6 +143,9 @@ mod tests {
             out,
             "<Event a=\"x&quot;&lt;&amp;c\">\n  <Data>1 &lt; 2&#65;&amp;<![CDATA[a]]]]><![CDATA[>b]]><?pi d?></Data>\n  <Empty/>\n</Event>"
         );
+        let mut ctl = String::new();
+        escape_into(&mut ctl, "a\u{1b}[31m\tb", false);
+        assert_eq!(ctl, "a&#x1b;[31m\tb");
         let mut flat = String::new();
         write_element(&mut flat, &e, None);
         assert!(flat.starts_with("<Event a=") && !flat.contains('\n'));
