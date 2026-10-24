@@ -36,7 +36,7 @@ impl Default for Limits {
         Limits {
             max_fragment_depth: 8,
             max_element_depth: 64,
-            max_nodes: 1 << 20,
+            max_nodes: 100_000,
         }
     }
 }
