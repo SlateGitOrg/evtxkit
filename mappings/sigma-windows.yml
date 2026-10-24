@@ -1,0 +1,81 @@
+# Built-in Sigma-style field mapping for Windows event logs.
+#
+# `services` maps Sigma logsource `service` names to EVTX channels.
+# `categories` tag events with a Sigma logsource `category` and rename their
+# fields to the Sigma taxonomy, so one rule written against `Image` /
+# `CommandLine` matches both Sysmon and native Security auditing.
+# Renames inside one rule are applied simultaneously.
+name: sigma-windows
+product: windows
+
+services:
+  security: Security
+  system: System
+  application: Application
+  sysmon: Microsoft-Windows-Sysmon/Operational
+  powershell: Microsoft-Windows-PowerShell/Operational
+  powershell-classic: Windows PowerShell
+  taskscheduler: Microsoft-Windows-TaskScheduler/Operational
+  windefend: Microsoft-Windows-Windows Defender/Operational
+  wmi: Microsoft-Windows-WMI-Activity/Operational
+  bits-client: Microsoft-Windows-Bits-Client/Operational
+  firewall-as: Microsoft-Windows-Windows Firewall With Advanced Security/Firewall
+  terminalservices-localsessionmanager: Microsoft-Windows-TerminalServices-LocalSessionManager/Operational
+
+rename: {}
+
+categories:
+  # --- Sysmon: already uses Sigma field names --------------------------------
+  - { category: process_creation, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [1] }
+  - { category: file_change, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [2] }
+  - { category: network_connection, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [3] }
+  - { category: sysmon_status, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [4, 16] }
+  - { category: process_termination, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [5] }
+  - { category: driver_load, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [6] }
+  - { category: image_load, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [7] }
+  - { category: create_remote_thread, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [8] }
+  - { category: raw_access_thread, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [9] }
+  - { category: process_access, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [10] }
+  - { category: file_event, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [11] }
+  - { category: registry_add, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [12] }
+  - { category: registry_set, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [13] }
+  - { category: registry_rename, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [14] }
+  - { category: create_stream_hash, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [15] }
+  - { category: pipe_created, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [17, 18] }
+  - { category: wmi_event, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [19, 20, 21] }
+  - { category: dns_query, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [22] }
+  - { category: file_delete, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [23, 26] }
+  - { category: clipboard_capture, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [24] }
+  - { category: process_tampering, channel: Microsoft-Windows-Sysmon/Operational, event_ids: [25] }
+
+  # --- Native Security auditing ----------------------------------------------
+  - category: process_creation
+    channel: Security
+    event_ids: [4688]
+    rename:
+      NewProcessName: Image
+      NewProcessId: ProcessId
+      ParentProcessName: ParentImage
+      ProcessId: ParentProcessId
+      SubjectUserName: User
+      SubjectLogonId: LogonId
+      MandatoryLabel: IntegrityLevel
+  - category: process_termination
+    channel: Security
+    event_ids: [4689]
+    rename:
+      ProcessName: Image
+      SubjectUserName: User
+  - category: network_connection
+    channel: Security
+    event_ids: [5156]
+    rename:
+      Application: Image
+      SourceAddress: SourceIp
+      SourcePort: SourcePort
+      DestAddress: DestinationIp
+      DestPort: DestinationPort
+
+  # --- PowerShell ------------------------------------------------------------
+  - { category: ps_script, channel: Microsoft-Windows-PowerShell/Operational, event_ids: [4104] }
+  - { category: ps_module, channel: Microsoft-Windows-PowerShell/Operational, event_ids: [4103] }
