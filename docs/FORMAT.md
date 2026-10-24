@@ -187,7 +187,10 @@ covered by synthetic tests in `tests/synthetic.rs` and unit tests:
    product). One-item arrays render as their item.
 
 Limits keep hostile input bounded: fragment nesting ≤ 8, element depth ≤ 64
-per fragment, and ≤ 100 000 nodes created per template instance.
+per fragment, and node budgets of ≤ 100 000 units per record (shared by all
+its template instances) and ≤ 1 000 000 per chunk, where every created or
+cloned node costs its deep size (one unit per node plus one per 64 payload
+bytes).
 
 ### 4.3 Value types (`src/value.rs`)
 

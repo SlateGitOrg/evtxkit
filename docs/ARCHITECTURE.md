@@ -75,9 +75,24 @@ template uses it twice. (One-thread `parse` throughput went from 134.6 to
 173.4 MiB/s with this change — commit `1748f9a`, `cargo bench --bench
 throughput -- --copies 4 --runs 3 --threads 1`, single runs on a loaded
 machine, so treat the ratio as indicative.) Array values repeat
-their containing element; because several arrays multiply, every created node
-is charged against a budget (`Limits::max_nodes`, default 100 000) and
-exceeding it is an error, not an allocation storm.
+their containing element; because several arrays multiply, every created or
+cloned node is charged against a budget and exceeding it is an error, not an
+allocation storm.
+
+The budget (`template::NodeBudget`) counts *units*: one per node plus one per
+64 heap bytes of payload, so a long string cloned into many copies is paid for
+by size. An array copy is charged `element_cost` of the whole element (its
+deep size, O(subtree) to compute, which is the same order as the clone it
+pays for) before it is cloned; the array itself is lifted out first, so a
+copy never clones the array's other items. One budget covers everything a
+record decodes (`Limits::max_nodes`, default 100 000 units, shared by all its
+template instances and nested fragments), and whatever records spend also
+comes out of a per-chunk budget (`Limits::max_chunk_nodes`, default
+1 000 000), because a decoded chunk's records are kept together until the
+pipeline emits them. The invariant, tested in
+`spent_units_cover_everything_returned`, is that the units spent are never
+less than the deep size of the tree returned, so the budgets bound the memory
+of `window + threads` decoded chunks.
 
 ### Record resynchronisation — O(chunk) per chunk
 

@@ -31,7 +31,7 @@ and field names that line up with Sigma rules.
 | Matches the reference parser (`evtx` 0.12.3) on **all 4,805 records** of 9 public sample logs | `tests/golden.rs` | `cargo test --test golden` |
 | Never panics on corrupted input (mutated real logs, random token streams, random bytes, exhaustive byte flips) | `tests/corruption.rs` | `cargo test --test corruption` |
 | Parallel output is byte-identical to sequential output for 1–16 threads | `tests/pipeline.rs`, demo step 10 | `cargo test --test pipeline` |
-| 89 tests; **97.8 %** line coverage (all tests), **~90 %** of shipped code from integration tests alone | `make check`, `make coverage-shipped` | see *Testing* |
+| 96 tests; **97.9 %** line coverage (all tests), **~90 %** of shipped code from integration tests alone | `make check`, `make coverage-shipped` | see *Testing* |
 | One-thread decode **169 MiB/s**, 8 threads **699 MiB/s** (parse); JSONL dump 100 → 268 MiB/s | `bench/RESULTS.md` | `./scripts/bench.sh` |
 
 ## Architecture
@@ -364,29 +364,65 @@ whether that is allocator contention or machine load has not been
 investigated. Re-run `./scripts/bench.sh` on an idle machine for cleaner
 figures; `bench/RESULTS.md` is overwritten by each run.
 
+The table above was measured before fix round 1 (node budgets). One
+spot check afterwards, `cargo bench --locked --bench throughput -- --copies 4
+--runs 3 --threads 1` at load average 7–12, gave parse 162.6 MiB/s and dump
+95.7 MiB/s (14.8 MiB input): within this machine's run-to-run noise of the
+table, but not a re-run of the full benchmark.
+
+### Memory under hostile input
+
+`make hostile-rss` builds hostile files by hand (shapes in
+`tests/common/hostile.rs`) and reports `evtxkit dump` peak RSS. Every file
+except the last two is a single 69,632-byte file (one 64 KiB chunk). Output
+from fix round 1 (Apple M1 Pro, loaded machine; peak RSS varies by tens of MB
+between runs):
+
+```text
+file                     bytes threads stalled peak_rss_MB record_errors
+A-array-500              69632       1      no           8             1
+B-instances-400          69632       1      no           9             1
+C-records-300            69632       1      no          69           290
+D-string-25000           69632       1      no           9             1
+C-records-300-x64      4198400       1     yes         270         18560
+C-records-300-x64      4198400       8     yes         698         18560
+C-records-300-x1024   67112960       1     yes         307        296960
+C-records-300-x1024   67112960       8     yes         682        296960
+```
+
+(rows trimmed; the full table is in the project report). Before the fix, the
+same script against a build of commit `0a97b0a` (`EVTXKIT_BIN=… SET=small
+make hostile-rss`) measured 663 MB for `A-array-500`, 116 MB for
+`B-instances-20` and 402 MB for `D-string-25000`; the review measured 937 MB
+for the `A` shape. Growth was linear in the hostile parameter, so the
+larger pre-fix cases (`B-instances-400`, `C-records-300`) were not run.
+
 ## Testing
 
 ```console
 $ make check             # data checksums, fmt, clippy -D warnings (all targets), rustdoc -D warnings,
                          # then all tests under cargo-llvm-cov with --fail-under-lines 80
 $ make coverage-shipped  # integration tests only: coverage of shipped code, unit-test code not compiled
+$ make hostile-rss       # peak memory on hand-built hostile files (needs /usr/bin/time; not part of check)
 $ ./scripts/loc.sh       # line counts (shipped source vs tests)
 ```
 
 | suite | what it proves |
 |-------|----------------|
-| unit tests (44, in `src/`) | primitives: cursor bounds, CRC vectors, calendar math, value rendering, filters, mapping, stats |
+| unit tests (48, in `src/`) | primitives: cursor bounds, CRC vectors, calendar math, value rendering, filters, mapping, stats, node-budget accounting |
 | `tests/golden.rs` (11) | byte-level agreement with the reference parser on 4,805 records |
-| `tests/synthetic.rs` (11) | hand-assembled chunks for every token type, nested BinXML, arrays, limits, resync, CRC policies |
+| `tests/synthetic.rs` (13) | hand-assembled chunks for every token type, nested BinXML, arrays, limits, hostile expansions, resync, CRC policies |
+| `tests/budget.rs` (1, plus 2 ignored measurement tools) | samples fit budgets 100x/20x below the defaults; writes the hostile files for `make hostile-rss` |
 | `tests/corruption.rs` (8) | proptest: mutated real logs, random token streams, random bytes never panic; CRC32 = `crc32fast`; glob = regex |
 | `tests/pipeline.rs` (3) | parallel = sequential output; sink errors stop workers |
-| `tests/cli.rs` (11) | every subcommand end to end, exit codes, closed pipes, logging |
+| `tests/cli.rs` (12) | every subcommand end to end, exit codes, closed pipes, logging, the fix-round-1 hostile file |
 
-Line coverage from the latest `make check` (run in a fresh clone): **97.83 %**
-of 3,646 lines (this includes unit-test code that lives in `src/`);
-`make coverage-shipped`: **89.72 %** of 2,781 shipped lines (89.7–90.0 % across
-runs, because proptest draws new random inputs each run). `scripts/loc.sh`: 4,922 lines of non-test
-source (3,826 code lines), 2,924 lines of tests and benchmark code.
+Line coverage from the latest `make check` (run in a fresh clone, fix round 1):
+**97.87 %** of 3,760 lines (this includes unit-test code that lives in `src/`);
+`make coverage-shipped`: **90.50 %** of 2,831 shipped lines (it varies by a few
+tenths across runs, because proptest draws new random inputs each run).
+`scripts/loc.sh`: 5,035 lines of non-test source (3,894 code lines), 3,349
+lines of tests and benchmark code (1,196 of them unit tests inside `src/`).
 
 ## Design decisions
 
@@ -401,8 +437,13 @@ that shape behaviour:
 * **Don't trust the header's chunk count.** `sysmon.evtx` declares one chunk
   and holds nine; every 64 KiB slot is examined and classified.
 * **Bounded everything.** Explicit element stack, fragment depth ≤ 8, element
-  depth ≤ 64, ≤ 100 000 nodes per template instance, O(chunk) resync, bounded
-  pipeline window. See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
+  depth ≤ 64, O(chunk) resync, bounded pipeline window, and a node budget that
+  charges every created or cloned node its full deep size: ≤ 100 000 units
+  per record and ≤ 1 000 000 per chunk (a unit is a node or 64 payload bytes).
+  The first version charged array copies too little; a reviewer's crafted
+  68 KB file reached 937 MB before fix round 1 (see *Memory under hostile
+  input*). See
+  [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 * **Typed tree, two output shapes.** The tree keeps value types, so JSONL has
   native numbers (`"EventID":4624`) while the flat `fields` view is all text
   with Sigma names for rule matching.
@@ -424,6 +465,11 @@ that shape behaviour:
   parser rejects them too); they are not expected in stored logs.
 * Whole files are read into memory (no mmap); multi-GB carved images would
   need that much RAM.
+* The node budgets bound memory, not to a small figure: a hostile file whose
+  every chunk exhausts its budget peaks at about 700 MB with 8 threads and a
+  stalled consumer (`make hostile-rss`). The limits are not configurable
+  from the CLI; a genuine log that exceeds them loses those records (the
+  samples use at most 255 units per record and 12,849 per chunk).
 * Records recovered by resynchronisation have no oracle to compare against.
 * XML output escapes control characters as `&#xNN;`, which strict XML 1.0
   parsers reject (one record in the samples contains such a character).
