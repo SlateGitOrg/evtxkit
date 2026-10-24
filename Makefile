@@ -7,7 +7,7 @@
 CARGO ?= cargo
 COVERAGE_MIN ?= 80
 
-.PHONY: check data-check fmt-check lint doc test coverage demo bench golden loc release clean
+.PHONY: check data-check fmt-check lint doc test coverage coverage-shipped demo bench golden loc release clean
 
 check: data-check fmt-check lint doc coverage
 	@echo "make check: all gates passed"
@@ -31,6 +31,11 @@ coverage:
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || { \
 	  echo "cargo-llvm-cov is required: rustup component add llvm-tools-preview && cargo install cargo-llvm-cov --locked"; exit 1; }
 	$(CARGO) llvm-cov --locked --summary-only --fail-under-lines $(COVERAGE_MIN)
+
+# Coverage of shipped code from integration tests only (unit-test code inside
+# src/ is not compiled, so it cannot inflate the figure).
+coverage-shipped:
+	$(CARGO) llvm-cov --locked --summary-only --test cli --test corruption --test golden --test pipeline --test synthetic
 
 release:
 	$(CARGO) build --locked --release

@@ -9,7 +9,7 @@ output). Nothing is downloaded at test time.
 |------|-----:|-----:|-------------------|
 | `security.evtx` | 2.1 MB | 2,261 | Security channel, 26 chunks + 7 zero-filled slots, logon events |
 | `system.evtx` | 1.1 MB | 1,881 | System channel, classic (non-manifest) providers, `Qualifiers` attributes |
-| `sysmon.evtx` | 1.1 MB | 366 | Sysmon/Operational; 8 slots of non-zero slack after the last chunk |
+| `sysmon.evtx` | 1.1 MB | 358 | Sysmon/Operational; 8 slots of non-zero slack after the last chunk |
 | `sample_with_a_bad_chunk_magic.evtx` | 1.0 MB | 270 | Dirty file: two corrupt chunk slots, partially written records, record-CRC mismatches |
 | `Application_no_crc32.evtx` | 68 KB | 17 | `NO_CRC32` flags on file and chunk (format 3.2) |
 | `HelloForBusiness-Operational.evtx` | 68 KB | 6 | Dirty chunk with a record whose trailing size copy is zero |
