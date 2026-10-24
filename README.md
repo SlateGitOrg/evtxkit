@@ -31,7 +31,7 @@ and field names that line up with Sigma rules.
 | Matches the reference parser (`evtx` 0.12.3) on **all 4,805 records** of 9 public sample logs | `tests/golden.rs` | `cargo test --test golden` |
 | Never panics on corrupted input (mutated real logs, random token streams, random bytes, exhaustive byte flips) | `tests/corruption.rs` | `cargo test --test corruption` |
 | Parallel output is byte-identical to sequential output for 1–16 threads | `tests/pipeline.rs`, demo step 10 | `cargo test --test pipeline` |
-| 89 tests; **97.8 %** line coverage (all tests), **90.0 %** of shipped code from integration tests alone | `make check`, `make coverage-shipped` | see *Testing* |
+| 89 tests; **97.8 %** line coverage (all tests), **~90 %** of shipped code from integration tests alone | `make check`, `make coverage-shipped` | see *Testing* |
 | One-thread decode **169 MiB/s**, 8 threads **699 MiB/s** (parse); JSONL dump 100 → 268 MiB/s | `bench/RESULTS.md` | `./scripts/bench.sh` |
 
 ## Architecture
@@ -386,9 +386,10 @@ $ ./scripts/loc.sh       # line counts (shipped source vs tests)
 | `tests/pipeline.rs` (3) | parallel = sequential output; sink errors stop workers |
 | `tests/cli.rs` (11) | every subcommand end to end, exit codes, closed pipes, logging |
 
-Line coverage from the latest `make check`: **97.79 %** (3,625 lines measured,
-including unit-test code that lives in `src/`); `make coverage-shipped`:
-**90.04 %** of 2,781 shipped lines. `scripts/loc.sh`: 4,922 lines of non-test
+Line coverage from the latest `make check` (run in a fresh clone): **97.83 %**
+of 3,646 lines (this includes unit-test code that lives in `src/`);
+`make coverage-shipped`: **89.72 %** of 2,781 shipped lines (89.7–90.0 % across
+runs, because proptest draws new random inputs each run). `scripts/loc.sh`: 4,922 lines of non-test
 source (3,826 code lines), 2,924 lines of tests and benchmark code.
 
 ## Design decisions
