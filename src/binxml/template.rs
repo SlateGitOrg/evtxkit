@@ -28,6 +28,45 @@ pub struct TemplateDef {
     pub data_size: usize,
     /// Root element with unresolved substitutions.
     pub root: Element,
+    /// How many times each substitution index occurs in `root`; lets
+    /// instantiation move a value on its last use instead of cloning it.
+    pub uses: Vec<u32>,
+}
+
+impl TemplateDef {
+    /// Builds a definition and pre-computes substitution use counts.
+    pub fn new(offset: usize, guid: Guid, data_size: usize, root: Element) -> Self {
+        let mut uses = Vec::new();
+        count_uses(&root, &mut uses);
+        TemplateDef {
+            offset,
+            guid,
+            data_size,
+            root,
+            uses,
+        }
+    }
+}
+
+fn count_uses(el: &Element, uses: &mut Vec<u32>) {
+    let nodes = el
+        .attributes
+        .iter()
+        .flat_map(|a| a.value.iter())
+        .chain(el.children.iter());
+    for n in nodes {
+        match n {
+            Node::Substitution(sub) => {
+                let i = usize::from(sub.index);
+                if uses.len() <= i {
+                    uses.resize(i + 1, 0);
+                }
+                uses[i] += 1;
+            }
+            Node::Element(child) => count_uses(child, uses),
+            _ => {}
+        }
+    }
 }
 
 /// One entry of a template instance's value array.
@@ -39,22 +78,27 @@ pub enum TemplateValue {
     Xml(Vec<Node>),
 }
 
-/// Instantiates `root` with `values`, spending at most `budget` nodes.
+/// Instantiates `template` with `values`, spending at most `budget` nodes.
+///
+/// Values are moved into the tree on their last use and cloned before that,
+/// so `values` is left partially consumed.
 pub fn instantiate(
-    root: &Element,
-    values: &[TemplateValue],
+    template: &TemplateDef,
+    values: &mut [TemplateValue],
     budget: usize,
 ) -> Result<Vec<Element>> {
     let mut inst = Instantiator {
         values,
+        uses: template.uses.clone(),
         remaining: budget,
         limit: budget,
     };
-    inst.element(root)
+    inst.element(&template.root)
 }
 
 struct Instantiator<'v> {
-    values: &'v [TemplateValue],
+    values: &'v mut [TemplateValue],
+    uses: Vec<u32>,
     remaining: usize,
     limit: usize,
 }
@@ -112,22 +156,32 @@ impl Instantiator<'_> {
     fn resolve_into(&mut self, node: &Node, out: &mut Vec<Node>) -> Result<()> {
         match node {
             Node::Substitution(sub) => {
+                let i = usize::from(sub.index);
                 // Out-of-range indexes resolve to nothing (fail-soft, as Windows does).
-                let Some(value) = self.values.get(usize::from(sub.index)) else {
+                let Some(value) = self.values.get_mut(i) else {
                     return Ok(());
                 };
-                match value {
-                    TemplateValue::Value(v) => {
-                        if sub.optional && v.is_empty() {
-                            return Ok(());
-                        }
-                        self.spend(1)?;
-                        out.push(Node::Value(v.clone()));
-                    }
-                    TemplateValue::Xml(nodes) => {
-                        self.spend(count_nodes(nodes))?;
-                        out.extend(nodes.iter().cloned());
-                    }
+                let cost = match &*value {
+                    TemplateValue::Value(v) if sub.optional && v.is_empty() => return Ok(()),
+                    TemplateValue::Value(_) => 1,
+                    TemplateValue::Xml(nodes) => count_nodes(nodes),
+                };
+                if cost > self.remaining {
+                    return Err(EvtxError::ExpansionLimit { limit: self.limit });
+                }
+                self.remaining -= cost;
+                let last_use = self.uses.get(i).is_none_or(|&u| u <= 1);
+                if let Some(u) = self.uses.get_mut(i) {
+                    *u = u.saturating_sub(1);
+                }
+                let taken = if last_use {
+                    std::mem::replace(value, TemplateValue::Value(Value::Null))
+                } else {
+                    value.clone()
+                };
+                match taken {
+                    TemplateValue::Value(v) => out.push(Node::Value(v)),
+                    TemplateValue::Xml(nodes) => out.extend(nodes),
                 }
             }
             Node::Element(e) => {
@@ -203,6 +257,10 @@ mod tests {
         Value::String(v.into())
     }
 
+    fn def(root: Element) -> TemplateDef {
+        TemplateDef::new(0, Guid([0; 16]), 0, root)
+    }
+
     fn template() -> Element {
         let mut root = Element::new("Event");
         let mut a = Element::new("A");
@@ -232,7 +290,9 @@ mod tests {
             TemplateValue::Value(Value::Array(vec![s("a"), s(""), s("c")])),
             TemplateValue::Xml(vec![Node::Element(Element::new("Nested"))]),
         ];
-        let out = instantiate(&template(), &values, 1000).unwrap();
+        let def = TemplateDef::new(0, Guid([0; 16]), 0, template());
+        assert_eq!(def.uses, vec![2, 1, 1, 1, 0, 0, 0, 0, 0, 1]);
+        let out = instantiate(&def, &mut values.clone(), 1000).unwrap();
         assert_eq!(out.len(), 1);
         let root = &out[0];
         let a = root.child("A").unwrap();
@@ -260,7 +320,7 @@ mod tests {
             TemplateValue::Value(Value::Array(vec![Value::UInt8(1), Value::UInt8(2)])),
             TemplateValue::Value(Value::Array(vec![s("only")])),
         ];
-        let out = instantiate(&root, &values, 1000).unwrap();
+        let out = instantiate(&def(root), &mut values.clone(), 1000).unwrap();
         let ks: Vec<_> = out.iter().map(|e| e.attr("k").unwrap()).collect();
         assert_eq!(ks, vec!["1", "2"]);
         assert!(out.iter().all(|e| e.text() == "only"));
@@ -274,7 +334,7 @@ mod tests {
         }
         let arr = TemplateValue::Value(Value::Array(vec![s("a"), s("b")]));
         let values = vec![arr; 20];
-        let err = instantiate(&root, &values, 10_000).unwrap_err();
+        let err = instantiate(&def(root), &mut values.clone(), 10_000).unwrap_err();
         assert_eq!(err, EvtxError::ExpansionLimit { limit: 10_000 });
     }
 
@@ -282,7 +342,7 @@ mod tests {
     fn optional_empty_xml_vanishes() {
         let mut root = Element::new("R");
         root.children.push(sub(0, true));
-        let out = instantiate(&root, &[TemplateValue::Xml(vec![])], 10).unwrap();
+        let out = instantiate(&def(root), &mut [TemplateValue::Xml(vec![])], 10).unwrap();
         assert!(out[0].children.is_empty());
         assert_eq!(count_nodes(&[Node::CharRef(1)]), 1);
     }

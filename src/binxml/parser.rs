@@ -220,12 +220,12 @@ impl<'a> ChunkContext<'a> {
                 _ => None,
             })
             .ok_or_else(|| EvtxError::invalid("template definition", offset, "no root element"))?;
-        Ok(Rc::new(TemplateDef {
+        Ok(Rc::new(TemplateDef::new(
             offset,
-            guid: Guid(guid),
+            Guid(guid),
             data_size,
             root,
-        }))
+        )))
     }
 
     /// Parses a record's BinXML body `data[start..end]` into its root element.
@@ -462,6 +462,6 @@ impl<'a> ChunkContext<'a> {
             };
             values.push(value);
         }
-        instantiate(&template.root, &values, self.limits.max_nodes)
+        instantiate(&template, &mut values, self.limits.max_nodes)
     }
 }
