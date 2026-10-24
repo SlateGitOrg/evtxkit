@@ -39,6 +39,7 @@ pub mod model;
 pub mod pipeline;
 pub mod record;
 pub mod render;
+pub mod stats;
 pub mod synth;
 pub mod time;
 pub mod value;
