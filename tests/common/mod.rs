@@ -1,6 +1,7 @@
 //! Shared helpers for integration tests.
 #![allow(dead_code, clippy::unwrap_used, missing_docs)]
 
+pub mod builder;
 
 use evtxkit::model::{Element, Node};
 use serde_json::{Value as Json, json};
@@ -20,7 +21,8 @@ pub fn sample_names() -> Vec<String> {
         .unwrap()
         .filter_map(|e| {
             let p = e.unwrap().path();
-            (p.extension()? == "evtx").then(|| p.file_stem().unwrap().to_string_lossy().into_owned())
+            (p.extension()? == "evtx")
+                .then(|| p.file_stem().unwrap().to_string_lossy().into_owned())
         })
         .collect();
     names.sort();
