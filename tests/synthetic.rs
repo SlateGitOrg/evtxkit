@@ -4,6 +4,7 @@
 mod common;
 
 use common::builder::*;
+use common::hostile;
 use evtxkit::binxml::Limits;
 use evtxkit::pipeline::{CrcPolicy, decode_slot};
 use evtxkit::{ChunkSlot, CrcStatus, EvtxError, EvtxFile, Record, RecordError, render};
@@ -394,7 +395,7 @@ fn fragment_depth_and_expansion_limits() {
     let limited: Vec<_> = chunk.records_with(tight).collect();
     assert!(matches!(
         limited[0].as_ref().unwrap_err().error,
-        EvtxError::ExpansionLimit { limit: 50 }
+        EvtxError::ExpansionLimit { limit: 50, .. }
     ));
     let shallow = Limits {
         max_fragment_depth: 0,
@@ -404,6 +405,64 @@ fn fragment_depth_and_expansion_limits() {
     assert!(matches!(
         limited[0].as_ref().unwrap_err().error,
         EvtxError::DepthLimit { limit: 0, .. }
+    ));
+}
+
+fn budget_error(r: &Result<Record, RecordError>, scope: &str) -> bool {
+    matches!(r, Err(e) if matches!(e.error, EvtxError::ExpansionLimit { scope: s, .. } if s == scope))
+}
+
+/// Threat-model item T4 with default limits. Before fix round 1 the first
+/// shape (a 68 KB file) reached 937 MB peak RSS in `evtxkit dump -t 1`.
+#[test]
+fn hostile_expansions_hit_the_record_budget() {
+    for chunk in [
+        hostile::array_clone_bomb(500),
+        hostile::multi_instance_bomb(400),
+        hostile::multi_instance_bomb(2),
+        hostile::string_clone_bomb(16_000, 25_000),
+    ] {
+        let r = records(chunk);
+        assert_eq!(r.len(), 1);
+        assert!(budget_error(&r[0], "record"), "{:?}", r[0]);
+    }
+    // One ~90,000-node instance fits; a single small copy of each shape too.
+    assert!(records(hostile::multi_instance_bomb(1))[0].is_ok());
+    assert!(records(hostile::array_clone_bomb(1))[0].is_ok());
+}
+
+#[test]
+fn hostile_record_floods_hit_the_chunk_budget() {
+    // 300 records of ~90,000 nodes each: every record fits its own budget,
+    // the chunk's 1,000,000 stops the flood after 10 of them.
+    let r = records(hostile::many_records_bomb(300));
+    assert_eq!(r.len(), 300);
+    let ok = r.iter().take_while(|r| r.is_ok()).count();
+    assert_eq!(ok, 10);
+    assert!(r[ok..].iter().all(|r| budget_error(r, "chunk")));
+    let kept: usize = r[..ok]
+        .iter()
+        .map(|r| evtxkit::binxml::template::element_cost(&r.as_ref().unwrap().root))
+        .sum();
+    assert!(kept <= Limits::default().max_chunk_nodes, "{kept}");
+    // A tighter chunk budget stops it sooner.
+    let data = file(&[hostile::many_records_bomb(300)]);
+    let f = EvtxFile::from_bytes(data).unwrap();
+    let ChunkSlot::Chunk(chunk) = f.chunk(0) else {
+        panic!("chunk")
+    };
+    let tight = Limits {
+        max_chunk_nodes: 200_000,
+        ..Limits::default()
+    };
+    let r: Vec<_> = chunk.records_with(tight).collect();
+    assert_eq!(r.iter().take_while(|r| r.is_ok()).count(), 2);
+    assert!(matches!(
+        r[2].as_ref().unwrap_err().error,
+        EvtxError::ExpansionLimit {
+            limit: 200_000,
+            scope: "chunk"
+        }
     ));
 }
 

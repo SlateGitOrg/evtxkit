@@ -2,6 +2,7 @@
 #![allow(dead_code, clippy::unwrap_used, missing_docs)]
 
 pub mod builder;
+pub mod hostile;
 
 use evtxkit::model::{Element, Node};
 use serde_json::{Value as Json, json};

@@ -93,11 +93,14 @@ pub enum EvtxError {
         offset: usize,
     },
 
-    /// Template instantiation (array expansion) produced too many nodes.
-    #[error("template expansion limit ({limit} nodes) exceeded")]
+    /// Decoding would create more tree nodes than the record's or the chunk's
+    /// budget allows (see [`crate::binxml::Limits`]).
+    #[error("node budget exceeded: more than {limit} nodes per {scope}")]
     ExpansionLimit {
-        /// The configured limit.
+        /// The configured limit that was hit.
         limit: usize,
+        /// Which budget ran out: `"record"` or `"chunk"`.
+        scope: &'static str,
     },
 
     /// An operating-system I/O error (message only, so the type stays `Clone`).

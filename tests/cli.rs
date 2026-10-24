@@ -125,6 +125,28 @@ fn dump_filters_errors_and_output_file() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// The fix-round-1 review case end to end: a 68 KB file whose one record
+/// asked for ~25 million elements is reported as one record error.
+#[test]
+fn hostile_expansion_is_a_record_error() {
+    let dir = std::env::temp_dir().join(format!("evtxkit-bomb-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("bomb.evtx");
+    let data = common::builder::file(&[common::hostile::array_clone_bomb(500)]);
+    assert_eq!(data.len(), 69_632);
+    std::fs::write(&path, data).unwrap();
+    let o = evtxkit(&["dump", "-t", "1", "--emit-errors", path.to_str().unwrap()]);
+    assert!(o.status.success());
+    let lines = json_lines(&o);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["error"], true);
+    assert_eq!(
+        lines[0]["message"],
+        "node budget exceeded: more than 100000 nodes per record"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn strict_crc_skips_damaged_chunks() {
     let lenient = evtxkit(&[

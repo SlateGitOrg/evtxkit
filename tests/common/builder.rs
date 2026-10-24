@@ -26,6 +26,11 @@ pub fn v_null() -> Val {
     (0x00, Vec::new())
 }
 
+/// A UInt8 array (type 0x84) holding `n` items.
+pub fn v_u8_array(n: usize) -> Val {
+    (0x84, (0..n).map(|i| i as u8).collect())
+}
+
 pub fn v_str_array(items: &[&str]) -> Val {
     let mut b = Vec::new();
     for i in items {
@@ -235,6 +240,18 @@ impl ChunkBuilder {
         def: impl FnOnce(&mut Self),
         nested: impl FnOnce(&mut Self),
     ) {
+        self.template_with_values_then_nested(def, &[], nested);
+    }
+
+    /// Like [`Self::template_with_nested`], but the instance starts with the
+    /// plain values `pre` (substitution indexes `0..pre.len()`); the BinXML
+    /// value written by `nested` gets index `pre.len()`.
+    pub fn template_with_values_then_nested(
+        &mut self,
+        def: impl FnOnce(&mut Self),
+        pre: &[Val],
+        nested: impl FnOnce(&mut Self),
+    ) {
         self.u8(0x0c).u8(1).u32(0x1234);
         let def_offset = (self.pos + 4) as u32;
         self.u32(def_offset);
@@ -250,10 +267,16 @@ impl ChunkBuilder {
         self.in_template = was;
         let size = (self.pos - start) as u32;
         self.data[size_at..size_at + 4].copy_from_slice(&size.to_le_bytes());
-        // One descriptor whose size is patched after the nested fragment is written.
-        self.u32(1);
+        self.u32(pre.len() as u32 + 1);
+        for (ty, bytes) in pre {
+            self.u16(bytes.len() as u16).u8(*ty).u8(0);
+        }
+        // The BinXML descriptor's size is patched after the fragment is written.
         let desc_at = self.pos;
         self.u16(0).u8(0x21).u8(0);
+        for (_, bytes) in pre {
+            self.raw(bytes);
+        }
         let vstart = self.pos;
         self.fragment_header();
         nested(self);

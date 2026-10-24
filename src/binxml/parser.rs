@@ -10,7 +10,7 @@
 //! or definition whose offset equals the current read position is stored
 //! inline and must be skipped after decoding.
 
-use super::template::{TemplateDef, TemplateValue, instantiate};
+use super::template::{NodeBudget, TemplateDef, TemplateValue, instantiate};
 use super::token;
 use crate::bytes::{Cursor, u16_at};
 use crate::error::{EvtxError, Result};
@@ -27,8 +27,15 @@ pub struct Limits {
     pub max_fragment_depth: usize,
     /// Maximum element nesting inside one fragment.
     pub max_element_depth: usize,
-    /// Maximum nodes created while instantiating one template instance.
+    /// Budget of decoded-node units for one record, shared by all of its
+    /// template instances (nested ones included). A unit is one node, plus
+    /// one per 64 heap bytes of payload; array copies are charged their full
+    /// deep size (see [`crate::binxml::template::node_cost`]).
     pub max_nodes: usize,
+    /// Budget of decoded-node units for all records of one chunk together.
+    /// Bounds a decoded chunk's memory, since a chunk holds up to ~1,600
+    /// minimal records that could each spend `max_nodes`.
+    pub max_chunk_nodes: usize,
 }
 
 impl Default for Limits {
@@ -37,6 +44,7 @@ impl Default for Limits {
             max_fragment_depth: 8,
             max_element_depth: 64,
             max_nodes: 100_000,
+            max_chunk_nodes: 1_000_000,
         }
     }
 }
@@ -60,6 +68,10 @@ pub struct ChunkContext<'a> {
     limits: Limits,
     names: HashMap<usize, Arc<str>>,
     templates: HashMap<usize, std::result::Result<Rc<TemplateDef>, EvtxError>>,
+    /// Units left in the chunk's budget.
+    chunk_left: usize,
+    /// Budget of the record being decoded.
+    budget: NodeBudget,
 }
 
 /// Parser state for one fragment.
@@ -139,6 +151,8 @@ impl<'a> ChunkContext<'a> {
             limits,
             names: HashMap::new(),
             templates: HashMap::new(),
+            chunk_left: limits.max_chunk_nodes,
+            budget: NodeBudget::new(0, 0, "record"),
         }
     }
 
@@ -229,10 +243,26 @@ impl<'a> ChunkContext<'a> {
     }
 
     /// Parses a record's BinXML body `data[start..end]` into its root element.
+    ///
+    /// The record may spend `max_nodes` units, or whatever is left of the
+    /// chunk's `max_chunk_nodes` if that is less. Units spent by a record that
+    /// fails still count against the chunk.
     pub fn parse_record(&mut self, start: usize, end: usize) -> Result<Element> {
+        let Limits {
+            max_nodes,
+            max_chunk_nodes,
+            ..
+        } = self.limits;
+        self.budget = if self.chunk_left < max_nodes {
+            NodeBudget::new(self.chunk_left, max_chunk_nodes, "chunk")
+        } else {
+            NodeBudget::new(max_nodes, max_nodes, "record")
+        };
+        let allowance = self.budget.remaining();
         let mut cur = Cursor::new(self.data, start, end);
-        let nodes = self.parse_fragment(&mut cur, Mode::Record, 0)?;
-        nodes
+        let parsed = self.parse_fragment(&mut cur, Mode::Record, 0);
+        self.chunk_left -= allowance - self.budget.remaining();
+        parsed?
             .into_iter()
             .find_map(|n| match n {
                 Node::Element(e) => Some(e),
@@ -462,6 +492,6 @@ impl<'a> ChunkContext<'a> {
             };
             values.push(value);
         }
-        instantiate(&template, &mut values, self.limits.max_nodes)
+        instantiate(&template, &mut values, &mut self.budget)
     }
 }
