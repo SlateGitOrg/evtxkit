@@ -182,13 +182,9 @@ t=1  42d6e0ec504c8a5b
 t=8  42d6e0ec504c8a5b
 ```
 
-<details><summary>Full <code>make demo</code> transcript</summary>
+<details><summary>Full <code>make demo</code> transcript (cargo build lines omitted)</summary>
 
 ```text
-cargo build --locked --release
-   Compiling evtxkit v0.1.0 (/Users/architjain/projects/p50-01-evtxkit)
-    Finished `release` profile [optimized] target(s) in 12.43s
-./scripts/demo.sh
 
 ==> 1. File health: chunks, CRC32 verification, record counts
 $ evtxkit stats tests/data/security.evtx
