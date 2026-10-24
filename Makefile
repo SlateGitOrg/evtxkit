@@ -7,7 +7,7 @@
 CARGO ?= cargo
 COVERAGE_MIN ?= 80
 
-.PHONY: check data-check fmt-check lint doc test coverage coverage-shipped demo bench golden loc release clean
+.PHONY: check data-check fmt-check lint doc test coverage coverage-shipped demo bench hostile-rss golden loc release clean
 
 check: data-check fmt-check lint doc coverage
 	@echo "make check: all gates passed"
@@ -35,7 +35,7 @@ coverage:
 # Coverage of shipped code from integration tests only (unit-test code inside
 # src/ is not compiled, so it cannot inflate the figure).
 coverage-shipped:
-	$(CARGO) llvm-cov --locked --summary-only --test cli --test corruption --test golden --test pipeline --test synthetic
+	$(CARGO) llvm-cov --locked --summary-only --test budget --test cli --test corruption --test golden --test pipeline --test synthetic
 
 release:
 	$(CARGO) build --locked --release
@@ -45,6 +45,10 @@ demo: release
 
 bench:
 	./scripts/bench.sh
+
+# Peak memory on hand-built hostile files (threat model T4/T11).
+hostile-rss:
+	./scripts/hostile-rss.sh
 
 golden:
 	./scripts/gen-golden.sh
