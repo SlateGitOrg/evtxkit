@@ -166,6 +166,19 @@ fn stats_json_and_text() {
     assert_eq!(f["group_by"]["field"], "TargetUserName");
     assert_eq!(f["format_version"], "3.1");
 
+    // sysmon.evtx: the header claims 1 chunk; 9 decode, the 8 slots after
+    // them hold stale non-chunk bytes and are reported as slack, not damage.
+    let o = evtxkit(&["stats", "--json", &sample("sysmon.evtx")]);
+    let v: Json = serde_json::from_slice(&o.stdout).unwrap();
+    assert_eq!(v["total"]["chunks"], 9);
+    assert_eq!(v["total"]["slack_slots"], 8);
+    assert_eq!(v["total"]["corrupt_slots"], 0);
+    assert!(
+        o.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+
     let o = evtxkit(&[
         "stats",
         "--chunks",

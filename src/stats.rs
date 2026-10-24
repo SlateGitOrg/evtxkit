@@ -56,6 +56,8 @@ pub struct Stats {
     pub empty_slots: usize,
     /// Undecodable slots.
     pub corrupt_slots: usize,
+    /// Non-chunk slots beyond the header's chunk count.
+    pub slack_slots: usize,
     /// Chunks skipped because of CRC policy.
     pub skipped_chunks: usize,
     /// Chunk header CRC mismatches.
@@ -115,6 +117,7 @@ impl Stats {
         match info.kind {
             SlotKind::Empty => self.empty_slots += 1,
             SlotKind::Corrupt => self.corrupt_slots += 1,
+            SlotKind::Slack => self.slack_slots += 1,
             SlotKind::Chunk => {
                 self.chunks += 1;
                 self.templates += info.templates;
@@ -180,6 +183,7 @@ impl Stats {
         self.chunks += o.chunks;
         self.empty_slots += o.empty_slots;
         self.corrupt_slots += o.corrupt_slots;
+        self.slack_slots += o.slack_slots;
         self.skipped_chunks += o.skipped_chunks;
         self.header_crc_mismatches += o.header_crc_mismatches;
         self.records_crc_mismatches += o.records_crc_mismatches;
@@ -217,6 +221,7 @@ impl Stats {
             "chunks": self.chunks,
             "empty_slots": self.empty_slots,
             "corrupt_slots": self.corrupt_slots,
+            "slack_slots": self.slack_slots,
             "skipped_chunks": self.skipped_chunks,
             "crc": {
                 "header_mismatches": self.header_crc_mismatches,
@@ -248,8 +253,13 @@ impl Stats {
         let id = |v: Option<u64>| v.map_or("-".to_string(), |v| v.to_string());
         let _ = writeln!(
             s,
-            "  slots      {} ({} chunks, {} empty, {} corrupt, {} skipped)",
-            self.slots, self.chunks, self.empty_slots, self.corrupt_slots, self.skipped_chunks
+            "  slots      {} ({} chunks, {} empty, {} slack, {} corrupt, {} skipped)",
+            self.slots,
+            self.chunks,
+            self.empty_slots,
+            self.slack_slots,
+            self.corrupt_slots,
+            self.skipped_chunks
         );
         let _ = writeln!(
             s,

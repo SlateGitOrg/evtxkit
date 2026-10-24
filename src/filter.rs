@@ -426,8 +426,14 @@ mod tests {
         assert!(!t("?", ""));
         assert!(t("\\", "\\"));
         assert!(t("a\\\\b", "a\\b"), "escaped backslash");
-        assert!(t("C:\\Windows\\x*", "C:\\Windows\\xyz"), "plain backslashes are literal");
-        assert!(t("C:\\dir\\\\*", "C:\\dir\\abc"), "`\\\\*` = backslash then wildcard");
+        assert!(
+            t("C:\\Windows\\x*", "C:\\Windows\\xyz"),
+            "plain backslashes are literal"
+        );
+        assert!(
+            t("C:\\dir\\\\*", "C:\\dir\\abc"),
+            "`\\\\*` = backslash then wildcard"
+        );
         assert!(!t("a\\?", "ab"));
     }
 }

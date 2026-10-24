@@ -167,7 +167,13 @@ impl EvtxFile {
                 error: EvtxError::invalid("chunk index", start, "past end of file"),
             };
         }
-        Chunk::parse(index, start, &self.data[start..end])
+        match Chunk::parse(index, start, &self.data[start..end]) {
+            ChunkSlot::Corrupt {
+                error: EvtxError::BadSignature { .. },
+                ..
+            } if index >= usize::from(self.header.chunk_count) => ChunkSlot::Slack { index },
+            slot => slot,
+        }
     }
 
     /// Iterates over every chunk slot in file order.
@@ -177,13 +183,16 @@ impl EvtxFile {
 
     /// Iterates sequentially over every record of every decodable chunk.
     ///
-    /// Corrupt chunks surface as a single [`RecordError`] each.
+    /// Corrupt chunks surface as a single [`RecordError`] each; empty and
+    /// slack slots yield nothing.
     pub fn records(&self) -> impl Iterator<Item = std::result::Result<Record, RecordError>> + '_ {
         self.chunks()
             .flat_map(|slot| -> Box<dyn Iterator<Item = _>> {
                 match slot {
                     ChunkSlot::Chunk(chunk) => Box::new(chunk.records()),
-                    ChunkSlot::Empty { .. } => Box::new(std::iter::empty()),
+                    ChunkSlot::Empty { .. } | ChunkSlot::Slack { .. } => {
+                        Box::new(std::iter::empty())
+                    }
                     ChunkSlot::Corrupt { index, error } => {
                         Box::new(std::iter::once(Err(RecordError {
                             chunk_index: index,
@@ -257,7 +266,10 @@ mod tests {
         let f = EvtxFile::from_bytes(data).unwrap();
         assert_eq!(f.slot_count(), 2);
         assert!(matches!(f.chunk(0), ChunkSlot::Empty { index: 0 }));
+        // Slot 1 lies beyond the header's chunk count (0) but has a signature,
+        // so it is a truncated chunk, not slack.
         assert!(matches!(f.chunk(1), ChunkSlot::Corrupt { index: 1, .. }));
+        assert_eq!(f.chunk(1).index(), 1);
         let errs: Vec<_> = f.records().collect();
         assert_eq!(errs.len(), 1);
         assert!(errs[0].is_err());

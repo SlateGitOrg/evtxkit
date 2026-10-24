@@ -77,7 +77,7 @@ fn sink_errors_stop_the_workers() {
         let res = pipeline::run(
             &f,
             PipelineConfig { threads, window: 2 },
-            |slot| slot_index(&slot),
+            |slot| slot.index(),
             |i| {
                 assert_eq!(i, seen, "results arrive in order");
                 seen += 1;
@@ -86,13 +86,6 @@ fn sink_errors_stop_the_workers() {
         );
         assert_eq!(res, Err("stop"));
         assert_eq!(seen, 6);
-    }
-}
-
-fn slot_index(slot: &evtxkit::ChunkSlot<'_>) -> usize {
-    match slot {
-        evtxkit::ChunkSlot::Chunk(c) => c.index,
-        evtxkit::ChunkSlot::Empty { index } | evtxkit::ChunkSlot::Corrupt { index, .. } => *index,
     }
 }
 

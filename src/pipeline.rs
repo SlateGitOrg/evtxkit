@@ -147,6 +147,8 @@ pub enum SlotKind {
     Chunk,
     /// All-zero slot.
     Empty,
+    /// Non-chunk bytes beyond the header's chunk count.
+    Slack,
     /// Undecodable slot.
     Corrupt,
 }
@@ -197,6 +199,18 @@ pub fn decode_slot(slot: ChunkSlot<'_>, policy: CrcPolicy, limits: Limits) -> Sl
             info: SlotInfo {
                 index,
                 kind: SlotKind::Empty,
+                header_crc: None,
+                records_crc: None,
+                record_id_range: None,
+                templates: 0,
+                skipped: false,
+            },
+            records: Vec::new(),
+        },
+        ChunkSlot::Slack { index } => SlotBatch {
+            info: SlotInfo {
+                index,
+                kind: SlotKind::Slack,
                 header_crc: None,
                 records_crc: None,
                 record_id_range: None,

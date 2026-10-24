@@ -165,6 +165,12 @@ pub enum ChunkSlot<'a> {
         /// Slot index.
         index: usize,
     },
+    /// A slot without a chunk signature located beyond the chunk count in
+    /// the file header: unallocated slack (often stale data), not damage.
+    Slack {
+        /// Slot index.
+        index: usize,
+    },
     /// A slot that could not be decoded.
     Corrupt {
         /// Slot index.
@@ -172,6 +178,18 @@ pub enum ChunkSlot<'a> {
         /// Why.
         error: EvtxError,
     },
+}
+
+impl ChunkSlot<'_> {
+    /// The slot index.
+    pub fn index(&self) -> usize {
+        match self {
+            ChunkSlot::Chunk(c) => c.index,
+            ChunkSlot::Empty { index }
+            | ChunkSlot::Slack { index }
+            | ChunkSlot::Corrupt { index, .. } => *index,
+        }
+    }
 }
 
 impl<'a> Chunk<'a> {
