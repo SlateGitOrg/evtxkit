@@ -135,7 +135,11 @@ mod tests {
         let h = RecordHeader::parse(&ok, 0, ok.len()).unwrap();
         assert_eq!((h.size, h.record_id, h.timestamp), (32, 7, FileTime(9)));
         assert!(h.size_copy_valid);
-        assert!(!RecordHeader::parse(&frame(32, 33), 0, 32).unwrap().size_copy_valid);
+        assert!(
+            !RecordHeader::parse(&frame(32, 33), 0, 32)
+                .unwrap()
+                .size_copy_valid
+        );
         assert!(RecordHeader::parse(&ok, 0, 31).is_err());
         let mut bad = ok.clone();
         bad[0] = 0;

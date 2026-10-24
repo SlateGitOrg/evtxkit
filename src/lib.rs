@@ -34,6 +34,7 @@ pub mod error;
 pub mod file;
 pub mod model;
 pub mod record;
+pub mod render;
 pub mod time;
 pub mod value;
 
