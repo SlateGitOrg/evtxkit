@@ -2,7 +2,7 @@
 //!
 //! A from-scratch parser for the Windows XML Event Log (EVTX) format.
 //!
-//! * [`file`] — file header and chunk slots
+//! * [`file`](mod@file) — file header and chunk slots
 //! * [`chunk`] — chunk header, CRC32 verification, record iteration
 //! * [`record`] — record framing
 //! * [`binxml`] — BinXML token stream, templates and substitutions
