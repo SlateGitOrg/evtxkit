@@ -1,0 +1,16 @@
+[package]
+name = "refdump"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Golden-file generator: dumps the reference parser's (evtx crate) output as canonical XML trees."
+license = "MIT"
+
+# Standalone crate: deliberately NOT a member of the evtxkit workspace so that
+# `make check` never compiles the reference parser.
+[workspace]
+
+[dependencies]
+evtx = { version = "=0.12.3", default-features = false }
+quick-xml = "=0.38.4"
+serde_json = "1"
