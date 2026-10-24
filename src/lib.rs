@@ -33,8 +33,10 @@ pub mod crc32;
 pub mod error;
 pub mod file;
 pub mod model;
+pub mod pipeline;
 pub mod record;
 pub mod render;
+pub mod synth;
 pub mod time;
 pub mod value;
 
