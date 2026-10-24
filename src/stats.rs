@@ -12,6 +12,24 @@ use serde_json::{Value as Json, json};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
+/// Escapes control characters so log content cannot drive a terminal.
+pub fn printable(s: &str) -> std::borrow::Cow<'_, str> {
+    if s.chars().any(char::is_control) {
+        s.chars()
+            .map(|c| {
+                if c.is_control() {
+                    c.escape_unicode().to_string()
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect::<String>()
+            .into()
+    } else {
+        s.into()
+    }
+}
+
 /// Placeholder key for records whose field is absent or empty.
 const EMPTY: &str = "(empty)";
 
@@ -298,7 +316,7 @@ impl Stats {
             let items: Vec<String> = c
                 .top(top)
                 .iter()
-                .map(|(k, v)| format!("{k} ({v})"))
+                .map(|(k, v)| format!("{} ({v})", printable(k)))
                 .collect();
             let _ = writeln!(s, "  {title:<10} {}", items.join(", "));
         };
@@ -358,5 +376,7 @@ mod tests {
         f.insert("X", "1");
         assert_eq!(Stats::group_value(&f, "X"), "1");
         assert_eq!(Stats::group_value(&f, "Y"), "(missing)");
+        assert_eq!(printable("ok"), "ok");
+        assert_eq!(printable("a\u{1b}b"), "a\\u{1b}b");
     }
 }
