@@ -19,6 +19,7 @@ use crate::model::{Element, Node};
 use crate::record::{Record, RecordError};
 use crate::time::Precision;
 use crate::value::Value;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
@@ -26,6 +27,12 @@ use std::fmt::Write as _;
 pub fn write_str(out: &mut String, s: &str) {
     out.reserve(s.len() + 2);
     out.push('"');
+    write_escaped(out, s);
+    out.push('"');
+}
+
+/// Appends the JSON-escaped body of `s` (without quotes).
+fn write_escaped(out: &mut String, s: &str) {
     let mut start = 0;
     for (i, c) in s.char_indices() {
         let esc = match c {
@@ -48,7 +55,6 @@ pub fn write_str(out: &mut String, s: &str) {
         start = i + c.len_utf8();
     }
     out.push_str(&s[start..]);
-    out.push('"');
 }
 
 /// Appends a value as a JSON scalar (numbers and bools stay native).
@@ -66,6 +72,7 @@ pub fn write_value(out: &mut String, v: &Value) {
         Value::Real32(f) if f.is_finite() => push_num(out, f),
         Value::Real64(f) if f.is_finite() => push_num(out, f),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Value::String(s) | Value::AnsiString(s) => write_str(out, s),
         other => write_str(out, &other.to_text()),
     }
 }
@@ -93,81 +100,108 @@ pub fn write_element(out: &mut String, el: &Element) {
     write_element_skipping(out, el, None);
 }
 
+/// The JSON key of a child element and whether it was keyed by `@Name`.
+fn child_key(child: &Element) -> (Cow<'_, str>, bool) {
+    if &*child.name == "Data"
+        && let Some(name) = child.attr("Name")
+    {
+        return (Cow::Owned(name), true);
+    }
+    (Cow::Borrowed(&*child.name), false)
+}
+
+fn keys_unique(keys: &[(Cow<'_, str>, bool, &Element)]) -> bool {
+    if keys.len() <= 16 {
+        return keys
+            .iter()
+            .enumerate()
+            .all(|(i, (k, _, _))| keys[..i].iter().all(|(o, _, _)| o != k));
+    }
+    let mut seen = std::collections::HashSet::with_capacity(keys.len());
+    keys.iter().all(|(k, _, _)| seen.insert(k.as_ref()))
+}
+
 fn write_element_skipping(out: &mut String, el: &Element, skip_attr: Option<&str>) {
-    let attrs: Vec<_> = el
+    let mut attrs = el
         .attributes
         .iter()
         .filter(|a| &*a.name != "xmlns" && Some(&*a.name) != skip_attr)
-        .collect();
+        .peekable();
     let has_elements = el.has_element_children();
-    if attrs.is_empty() && !has_elements {
+    if attrs.peek().is_none() && !has_elements {
         write_content(out, &el.children);
         return;
     }
-    // Group child elements by key, preserving first-appearance order.
-    let mut keys: Vec<(String, Vec<String>)> = Vec::new();
-    let mut index: HashMap<String, usize> = HashMap::new();
-    let mut text = String::new();
-    for node in &el.children {
-        match node {
-            Node::Element(child) => {
-                let named = (&*child.name == "Data")
-                    .then(|| child.attr("Name"))
-                    .flatten();
-                let mut rendered = String::new();
-                let key = match named {
-                    Some(name) => {
-                        write_element_skipping(&mut rendered, child, Some("Name"));
-                        name
-                    }
-                    None => {
-                        write_element(&mut rendered, child);
-                        child.name.to_string()
-                    }
-                };
-                match index.get(&key) {
-                    Some(&i) => keys[i].1.push(rendered),
-                    None => {
-                        index.insert(key.clone(), keys.len());
-                        keys.push((key, vec![rendered]));
-                    }
-                }
-            }
-            n if n.is_text() => n.write_text(&mut text),
-            _ => {}
-        }
-    }
     out.push('{');
     let mut first = true;
-    let mut sep = |out: &mut String| {
-        if !first {
+    let sep = |out: &mut String, first: &mut bool| {
+        if !*first {
             out.push(',');
         }
-        first = false;
+        *first = false;
     };
     for a in attrs {
-        sep(out);
-        let mut key = String::with_capacity(a.name.len() + 1);
-        key.push('@');
-        key.push_str(&a.name);
-        write_str(out, &key);
-        out.push(':');
+        sep(out, &mut first);
+        out.push_str("\"@");
+        write_escaped(out, &a.name);
+        out.push_str("\":");
         write_content(out, &a.value);
     }
-    for (key, values) in &keys {
-        sep(out);
-        write_str(out, key);
-        out.push(':');
-        if let [single] = values.as_slice() {
-            out.push_str(single);
-        } else {
-            out.push('[');
-            out.push_str(&values.join(","));
-            out.push(']');
+    let keys: Vec<(Cow<'_, str>, bool, &Element)> = el
+        .child_elements()
+        .map(|c| {
+            let (k, named) = child_key(c);
+            (k, named, c)
+        })
+        .collect();
+    let child_out = |out: &mut String, named: bool, child: &Element| {
+        write_element_skipping(out, child, named.then_some("Name"));
+    };
+    if keys_unique(&keys) {
+        // Common case: write children straight into the output.
+        for (key, named, child) in &keys {
+            sep(out, &mut first);
+            write_str(out, key);
+            out.push(':');
+            child_out(out, *named, child);
+        }
+    } else {
+        // Repeated keys collect into arrays, in first-appearance order.
+        let mut groups: Vec<(&str, Vec<(bool, &Element)>)> = Vec::new();
+        let mut index: HashMap<&str, usize> = HashMap::new();
+        for (key, named, child) in &keys {
+            match index.get(key.as_ref()) {
+                Some(&i) => groups[i].1.push((*named, child)),
+                None => {
+                    index.insert(key.as_ref(), groups.len());
+                    groups.push((key.as_ref(), vec![(*named, child)]));
+                }
+            }
+        }
+        for (key, members) in groups {
+            sep(out, &mut first);
+            write_str(out, key);
+            out.push(':');
+            if let [(named, child)] = members.as_slice() {
+                child_out(out, *named, child);
+            } else {
+                out.push('[');
+                for (i, (named, child)) in members.iter().enumerate() {
+                    if i > 0 {
+                        out.push(',');
+                    }
+                    child_out(out, *named, child);
+                }
+                out.push(']');
+            }
         }
     }
+    let mut text = String::new();
+    for n in el.children.iter().filter(|n| n.is_text()) {
+        n.write_text(&mut text);
+    }
     if !text.trim().is_empty() {
-        sep(out);
+        sep(out, &mut first);
         out.push_str("\"#text\":");
         if has_elements {
             write_str(out, &text);
