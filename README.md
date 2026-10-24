@@ -417,8 +417,8 @@ $ ./scripts/loc.sh       # line counts (shipped source vs tests)
 | `tests/pipeline.rs` (3) | parallel = sequential output; sink errors stop workers |
 | `tests/cli.rs` (12) | every subcommand end to end, exit codes, closed pipes, logging, the fix-round-1 hostile file |
 
-Line coverage from the latest `make check` (run in a fresh clone, fix round 1):
-**97.87 %** of 3,760 lines (this includes unit-test code that lives in `src/`);
+Line coverage from `make check` in a fresh clone (two runs in fix round 1):
+**97.85–97.87 %** of 3,760 lines (this includes unit-test code that lives in `src/`);
 `make coverage-shipped`: **90.50 %** of 2,831 shipped lines (it varies by a few
 tenths across runs, because proptest draws new random inputs each run).
 `scripts/loc.sh`: 5,035 lines of non-test source (3,894 code lines), 3,349
