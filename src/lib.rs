@@ -26,13 +26,20 @@
 //! # Ok::<(), evtxkit::EvtxError>(())
 //! ```
 
+pub mod binxml;
 pub mod bytes;
+pub mod chunk;
 pub mod crc32;
 pub mod error;
+pub mod file;
 pub mod model;
+pub mod record;
 pub mod time;
 pub mod value;
 
+pub use chunk::{Chunk, ChunkSlot, CrcStatus};
 pub use error::{EvtxError, Result};
+pub use file::EvtxFile;
 pub use model::{Element, Node};
+pub use record::{Record, RecordError};
 pub use value::Value;
