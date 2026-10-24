@@ -12,6 +12,9 @@ use serde_json::{Value as Json, json};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
+/// Placeholder key for records whose field is absent or empty.
+const EMPTY: &str = "(empty)";
+
 /// Frequency counter with deterministic top-N output.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Counter {
@@ -150,14 +153,18 @@ impl Stats {
         self.first_timestamp = min_opt(self.first_timestamp, Some(r.timestamp));
         self.last_timestamp = max_opt(self.last_timestamp, Some(r.timestamp));
         if let Some(system) = r.root.child("System") {
-            let text = |name: &str| system.child(name).map(|e| e.text()).unwrap_or_default();
+            let text = |name: &str| {
+                let t = system.child(name).map(|e| e.text()).unwrap_or_default();
+                if t.is_empty() { EMPTY.to_string() } else { t }
+            };
             self.event_ids.add(&text("EventID"));
             self.channels.add(&text("Channel"));
             self.computers.add(&text("Computer"));
             let provider = system
                 .child("Provider")
                 .and_then(|p| p.attr("Name"))
-                .unwrap_or_default();
+                .filter(|p| !p.is_empty())
+                .unwrap_or_else(|| EMPTY.to_string());
             self.providers.add(&provider);
         }
         if let Some(g) = group {
