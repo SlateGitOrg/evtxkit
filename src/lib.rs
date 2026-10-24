@@ -29,6 +29,10 @@
 pub mod bytes;
 pub mod crc32;
 pub mod error;
+pub mod model;
 pub mod time;
+pub mod value;
 
 pub use error::{EvtxError, Result};
+pub use model::{Element, Node};
+pub use value::Value;
