@@ -443,7 +443,7 @@ mod tests {
     }
 
     /// `<E>%0<F>%1 x uses</F></E>`, `%0` an array of `items` UInt8s and `%1`
-    /// a BinXML value of `xml` empty elements (the fix-round-1 review shape).
+    /// a BinXML value of `xml` empty elements (a crafted-file shape that amplifies memory use).
     fn clone_bomb(items: usize, uses: u16, xml: usize) -> (TemplateDef, Vec<TemplateValue>) {
         let mut f = Element::new("F");
         for _ in 0..uses {

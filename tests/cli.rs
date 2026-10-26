@@ -125,7 +125,7 @@ fn dump_filters_errors_and_output_file() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// The fix-round-1 review case end to end: a 68 KB file whose one record
+/// The crafted-file memory-amplification case end to end: a 68 KB file whose one record
 /// asked for ~25 million elements is reported as one record error.
 #[test]
 fn hostile_expansion_is_a_record_error() {
