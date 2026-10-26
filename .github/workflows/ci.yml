@@ -1,4 +1,4 @@
-# Same gates as `make check`. Not yet executed: the repository has not been pushed.
+# Runs the same gates as `make check`, then the demo and a benchmark smoke run.
 name: CI
 
 on:

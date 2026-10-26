@@ -412,8 +412,8 @@ fn budget_error(r: &Result<Record, RecordError>, scope: &str) -> bool {
     matches!(r, Err(e) if matches!(e.error, EvtxError::ExpansionLimit { scope: s, .. } if s == scope))
 }
 
-/// Threat-model item T4 with default limits. Before fix round 1 the first
-/// shape (a 68 KB file) reached 937 MB peak RSS in `evtxkit dump -t 1`.
+/// Threat-model item T4 with default limits. The first shape (a 68 KB file)
+/// used to reach ~937 MB peak RSS in `evtxkit dump -t 1` before the budgets.
 #[test]
 fn hostile_expansions_hit_the_record_budget() {
     for chunk in [

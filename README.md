@@ -31,8 +31,8 @@ and field names that line up with Sigma rules.
 | Matches the reference parser (`evtx` 0.12.3) on **all 4,805 records** of 9 public sample logs | `tests/golden.rs` | `cargo test --test golden` |
 | Never panics on corrupted input (mutated real logs, random token streams, random bytes, exhaustive byte flips) | `tests/corruption.rs` | `cargo test --test corruption` |
 | Parallel output is byte-identical to sequential output for 1–16 threads | `tests/pipeline.rs`, demo step 10 | `cargo test --test pipeline` |
-| 96 tests; **97.9 %** line coverage (all tests), **~90 %** of shipped code from integration tests alone | `make check`, `make coverage-shipped` | see *Testing* |
-| One-thread decode **169 MiB/s**, 8 threads **699 MiB/s** (parse); JSONL dump 100 → 268 MiB/s | `bench/RESULTS.md` | `./scripts/bench.sh` |
+| 97 tests (incl. 1 doctest); **97.7 %** line coverage (all tests), **~90 %** of shipped code from integration tests alone | `make check`, `make coverage-shipped` | see *Testing* |
+| One-thread decode **250 MiB/s**, 8 threads **790 MiB/s** (parse); JSONL dump 143 → 664 MiB/s | `bench/RESULTS.md` | `./scripts/bench.sh` |
 
 ## Architecture
 
@@ -106,8 +106,9 @@ works for both Sysmon event 1 and Security event 4688 (`NewProcessName → Image
 
 ## Demo
 
-Output of `make demo` (real run, `scripts/demo.sh`, bundled samples only).
-Excerpts — the full transcript is below.
+Excerpts from `make demo` (`scripts/demo.sh`, bundled samples only, no network).
+The script runs ten steps; run it to see the full output, including a record
+as JSONL, the same record as XML and a flat Sigma field object.
 
 ```text
 ==> 1. File health: chunks, CRC32 verification, record counts
@@ -181,126 +182,6 @@ $ evtxkit dump -t 1 tests/data/system.evtx | sha256 ; evtxkit dump -t 8 tests/da
 t=1  42d6e0ec504c8a5b
 t=8  42d6e0ec504c8a5b
 ```
-
-<details><summary>Full <code>make demo</code> transcript (cargo build lines omitted)</summary>
-
-```text
-
-==> 1. File health: chunks, CRC32 verification, record counts
-$ evtxkit stats tests/data/security.evtx
-tests/data/security.evtx
-  format     3.1, header CRC ok, dirty
-  slots      33 (26 chunks, 7 empty, 0 slack, 0 corrupt, 0 skipped)
-  crc32      header mismatches 0, record-data mismatches 0, disabled 0
-  records    2261 decoded, 0 errors, 0 recovered, 0 size-copy mismatches
-  templates  240
-  ids        1 .. 2261
-  time       2016-07-08T18:12:51.681640Z .. 2017-04-14T01:21:10.906949Z
-  event ids  4907 (620), 4624 (583), 4672 (459), 5058 (102), 5061 (102)
-  providers  Microsoft-Windows-Security-Auditing (2224), Microsoft-Windows-Eventlog (37)
-  channels   Security (2261)
-  computers  WIN-03DLIIOFRRA (2219), 37L4247F27-25 (42)
-
-==> 2. One record as JSON Lines (EventData flattened by Data/@Name)
-$ evtxkit dump tests/data/new-user-security.evtx | head -n 1
-{"record_id":1,"timestamp":"2013-10-23T16:22:39.9735000Z","event":{"System":{"Provider":{"@Name":"Microsoft-Windows-Security-Auditing","@Guid":"54849625-5478-4994-A5BA-3E3B0328C30D"},"EventID":4728,"Version":0,"Level":0,"Task":13826,"Opcode":0,"Keywords":"0x8020000000000000","TimeCreated":{"@SystemTime":"2013-10-23T16:22:39.973500Z"},"EventRecordID":111,"Correlation":null,"Execution":{"@ProcessID":508,"@ThreadID":1032},"Channel":"Security","Computer":"IE8Win7","Security":null},"EventData":{"MemberName":"-","MemberSid":"S-1-5-21-3463664321-2923530833-3546627382-1000","TargetUserName":"None","TargetDomainName":"IE8Win7","TargetSid":"S-1-5-21-3463664321-2923530833-3546627382-513","SubjectUserSid":"S-1-5-18","SubjectUserName":"WIN-QALA5Q3KJ43$","SubjectDomainName":"WORKGROUP","SubjectLogonId":"0x3e7","PrivilegeList":"-"}}}
-
-==> 3. The same record as XML
-$ evtxkit dump -f xml tests/data/new-user-security.evtx | head -n 31
-<?xml version="1.0" encoding="utf-8"?>
-<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
-  <System>
-    <Provider Name="Microsoft-Windows-Security-Auditing" Guid="54849625-5478-4994-A5BA-3E3B0328C30D"/>
-    <EventID>4728</EventID>
-    <Version>0</Version>
-    <Level>0</Level>
-    <Task>13826</Task>
-    <Opcode>0</Opcode>
-    <Keywords>0x8020000000000000</Keywords>
-    <TimeCreated SystemTime="2013-10-23T16:22:39.973500Z"/>
-    <EventRecordID>111</EventRecordID>
-    <Correlation/>
-    <Execution ProcessID="508" ThreadID="1032"/>
-    <Channel>Security</Channel>
-    <Computer>IE8Win7</Computer>
-    <Security/>
-  </System>
-  <EventData>
-    <Data Name="MemberName">-</Data>
-    <Data Name="MemberSid">S-1-5-21-3463664321-2923530833-3546627382-1000</Data>
-    <Data Name="TargetUserName">None</Data>
-    <Data Name="TargetDomainName">IE8Win7</Data>
-    <Data Name="TargetSid">S-1-5-21-3463664321-2923530833-3546627382-513</Data>
-    <Data Name="SubjectUserSid">S-1-5-18</Data>
-    <Data Name="SubjectUserName">WIN-QALA5Q3KJ43$</Data>
-    <Data Name="SubjectDomainName">WORKGROUP</Data>
-    <Data Name="SubjectLogonId">0x3e7</Data>
-    <Data Name="PrivilegeList">-</Data>
-  </EventData>
-</Event>
-
-==> 4. Sigma-style hunting: process creations spawned by cmd.exe
-$ evtxkit grep --category process_creation -w 'ParentImage|endswith=\cmd.exe' -c tests/data/sysmon.evtx
-136
-
-==> 5. ...stacked by Image (top 5), using the Sigma field mapping
-$ evtxkit stats --sigma --by Image --top 5 tests/data/sysmon.evtx | tail -n 1
-  by Image   C:\Windows\SysWOW64\PING.EXE (131), (missing) (61), C:\Program Files\Opera\49.0.2725.64\installer.exe (11), C:\Windows\System32\UI0Detect.exe (10), C:\Windows\system32\svchost.exe (10)
-
-==> 6. First match as a flat Sigma field object
-$ evtxkit grep --sigma -f fields -w 'Image|endswith=\ping.exe' -w 'CommandLine|contains=127.0.0.1' tests/data/sysmon.evtx | head -n 1
-{"_record_id":1742,"_timestamp":"2017-12-26T13:10:29.1368792Z","_logsource":{"product":"windows","service":"sysmon","category":"process_creation"},"fields":{"Provider_Name":"Microsoft-Windows-Sysmon","Provider_Guid":"5770385F-C22A-43E0-BF4C-06F5698FFBD9","EventID":"1","Version":"5","Level":"4","Task":"1","Opcode":"0","Keywords":"0x8000000000000000","TimeCreated_SystemTime":"2017-12-26T13:10:29.136879Z","EventRecordID":"1742","Execution_ProcessID":"2284","Execution_ThreadID":"5252","Channel":"Microsoft-Windows-Sysmon/Operational","Computer":"DESKTOP-2KGM189","Security_UserID":"S-1-5-18","UtcTime":"2017-12-26 13:10:29.134","ProcessGuid":"94F748D5-4A45-5A42-0000-0010D265F20F","ProcessId":"9112","Image":"C:\\Windows\\SysWOW64\\PING.EXE","CommandLine":"ping  -n 6 127.0.0.1 ","CurrentDirectory":"C:\\Windows\\Temp\\","User":"NT AUTHORITY\\SYSTEM","LogonGuid":"94F748D5-5A64-5966-0000-0020E7030000","LogonId":"0x3e7","TerminalSessionId":"0","IntegrityLevel":"System","Hashes":"SHA1=CE8E487CB76704FE5FBB821A78A1E969EFBE71F9,MD5=A27A24553B2C36E139647F88DF738C35,SHA256=8F16A431C919A0AA7C9466EC1CDC1E721F30EB5C8182835585A1B74ABECB1920,IMPHASH=0EB64EACA8C951D760EEA1A941A2A3F7","ParentProcessGuid":"94F748D5-D211-597D-0000-00109BD2C107","ParentProcessId":"8392","ParentImage":"C:\\Windows\\SysWOW64\\cmd.exe","ParentCommandLine":"C:\\Windows\\system32\\cmd.exe /c C:\\Windows\\TEMP\\update.bat C:\\Users\\tony\\AppData\\Local\\Temp\\pytest-of-tony\\pytest-0\\test_agent_update_op0\\pathfinder\\pathfinder.exe C:\\Windows\\TEMP\\pathfinder_sfx.exe"}}
-
-==> 7. Logon events by logon type
-$ evtxkit grep -c -w EventID=4624 -w 'LogonType|in=2,10,11' tests/data/security.evtx  (interactive/remote/cached)
-84
-
-==> 8. A damaged log: corrupt slots, stale record CRCs, records recovered by resync
-$ evtxkit stats --chunks tests/data/sample_with_a_bad_chunk_magic.evtx
- WARN chunk 6 @ 0x61000: bad chunk signature at offset 0x61000 file=tests/data/sample_with_a_bad_chunk_magic.evtx
- WARN chunk 7 @ 0x73060: bad record signature at offset 0x2060 file=tests/data/sample_with_a_bad_chunk_magic.evtx
- WARN chunk 10 @ 0xa1000: bad chunk signature at offset 0xa1000 file=tests/data/sample_with_a_bad_chunk_magic.evtx
-tests/data/sample_with_a_bad_chunk_magic.evtx
-  format     3.1, header CRC ok, dirty
-  slots      16 (4 chunks, 10 empty, 0 slack, 2 corrupt, 0 skipped)
-  crc32      header mismatches 0, record-data mismatches 3, disabled 0
-  records    301 decoded, 1 errors, 31 recovered, 3 size-copy mismatches
-  templates  8
-  ids        45691 .. 47705
-  time       2018-08-07T15:51:15.724872Z .. 2018-08-08T16:40:15.820702Z
-  event ids  325 (300), 0 (1)
-  providers  Microsoft-Windows-AppXDeployment (300), (empty) (1)
-  channels   Microsoft-Windows-AppXDeployment/Operational (300), (empty) (1)
-  computers  DESKTOP-1N4R894 (301)
-  slot  kind     record ids              hdr-crc   data-crc  templates
-     0  chunk    46728..46857            ok        MISMATCH  2
-     1  empty    -                       -         -         0
-     2  empty    -                       -         -         0
-     3  empty    -                       -         -         0
-     4  empty    -                       -         -         0
-     5  empty    -                       -         -         0
-     6  corrupt  -                       -         -         0
-     7  chunk    47628..47705            ok        MISMATCH  2
-     8  chunk    45691..45819            ok        ok        2
-     9  chunk    45820..45949            ok        MISMATCH  2
-    10  corrupt  -                       -         -         0
-    11  empty    -                       -         -         0
-    12  empty    -                       -         -         0
-    13  empty    -                       -         -         0
-    14  empty    -                       -         -         0
-    15  empty    -                       -         -         0
-
-==> 9. Strict CRC policy drops chunks whose checksums fail
-$ evtxkit grep -c -q --strict-crc -e AppXDeployment tests/data/sample_with_a_bad_chunk_magic.evtx
-129
-
-==> 10. Chunk-parallel output is byte-identical to single-threaded output
-$ evtxkit dump -t 1 tests/data/system.evtx | sha256 ; evtxkit dump -t 8 tests/data/system.evtx | sha256
-t=1  42d6e0ec504c8a5b
-t=8  42d6e0ec504c8a5b
-```
-
-</details>
 
 ## Evaluation: agreement with a reference parser
 
@@ -339,44 +220,34 @@ input by stitching every valid chunk of the committed samples 16 times — real
 events, repeated — and measures two workloads: `parse` (decode every record
 into its tree) and `dump` (decode + render JSONL, output discarded).
 
-- Date: 2026-10-24
-- Machine: Apple M1 Pro (Darwin arm64)
-- Load average when started: 4.78 8.20 9.76
+- Date: 2026-10-26
+- Machine: Apple M5 Pro (Darwin arm64), 15 logical cores
 - Input: synthetic file stitched from the committed samples' chunks (see DATA.md)
 
-input: 944 chunks, 59.0 MiB (16 copies of 59 sample chunks); 8 logical cores; median of 7 runs
+input: 944 chunks, 59.0 MiB (16 copies of 59 sample chunks); median of 7 runs
 
 | workload | threads | median s | MiB/s | records/s | speedup |
 |----------|--------:|---------:|------:|----------:|--------:|
-| parse | 1 | 0.349 | 168.8 | 221402 | 1.00x |
-| parse | 2 | 0.214 | 276.1 | 362051 | 1.64x |
-| parse | 4 | 0.126 | 468.1 | 613812 | 2.77x |
-| parse | 8 | 0.084 | 698.8 | 916369 | 4.14x |
-| dump | 1 | 0.590 | 100.0 | 131122 | 1.00x |
-| dump | 2 | 0.368 | 160.3 | 210186 | 1.60x |
-| dump | 4 | 0.220 | 268.0 | 351394 | 2.68x |
-| dump | 8 | 0.220 | 267.9 | 351273 | 2.68x |
+| parse | 1 | 0.236 | 249.9 | 327737 | 1.00x |
+| parse | 2 | 0.159 | 370.2 | 485421 | 1.48x |
+| parse | 4 | 0.096 | 614.4 | 805659 | 2.46x |
+| parse | 8 | 0.075 | 789.6 | 1035485 | 3.16x |
+| dump | 1 | 0.412 | 143.4 | 188026 | 1.00x |
+| dump | 2 | 0.243 | 242.7 | 318211 | 1.69x |
+| dump | 4 | 0.135 | 436.3 | 572108 | 3.04x |
+| dump | 8 | 0.089 | 663.5 | 870082 | 4.63x |
 
-Read these numbers with care: the benchmark ran on a laptop shared with other
-build jobs (load average shown above), and the 8-thread run uses the M1 Pro's
-2 efficiency cores. The `dump` workload stops scaling at 4 threads in this run;
-whether that is allocator contention or machine load has not been
-investigated. Re-run `./scripts/bench.sh` on an idle machine for cleaner
-figures; `bench/RESULTS.md` is overwritten by each run.
-
-The table above was measured before fix round 1 (node budgets). One
-spot check afterwards, `cargo bench --locked --bench throughput -- --copies 4
---runs 3 --threads 1` at load average 7–12, gave parse 162.6 MiB/s and dump
-95.7 MiB/s (14.8 MiB input): within this machine's run-to-run noise of the
-table, but not a re-run of the full benchmark.
+Numbers depend on the machine; `bench/RESULTS.md` is overwritten by each run
+of the script. The input repeats the same chunks, so it exercises the decoder
+and renderer, not cache misses on a large, varied log.
 
 ### Memory under hostile input
 
 `make hostile-rss` builds hostile files by hand (shapes in
-`tests/common/hostile.rs`) and reports `evtxkit dump` peak RSS. Every file
-except the last two is a single 69,632-byte file (one 64 KiB chunk). Output
-from fix round 1 (Apple M1 Pro, loaded machine; peak RSS varies by tens of MB
-between runs):
+`tests/common/hostile.rs`) and reports `evtxkit dump` peak RSS. Except for the
+last four rows, each file is a single 69,632-byte file (one 64 KiB chunk). The
+"stalled" runs pipe stdout into a consumer that sleeps first, so the pipeline
+window fills. Peak RSS varies by tens of MB between runs.
 
 ```text
 file                     bytes threads stalled peak_rss_MB record_errors
@@ -390,12 +261,8 @@ C-records-300-x1024   67112960       1     yes         307        296960
 C-records-300-x1024   67112960       8     yes         682        296960
 ```
 
-(rows trimmed; the full table is in the project report). Before the fix, the
-same script against a build of commit `0a97b0a` (`EVTXKIT_BIN=… SET=small
-make hostile-rss`) measured 663 MB for `A-array-500`, 116 MB for
-`B-instances-20` and 402 MB for `D-string-25000`; the review measured 937 MB
-for the `A` shape. Growth was linear in the hostile parameter, so the
-larger pre-fix cases (`B-instances-400`, `C-records-300`) were not run.
+Budget design and the threat each file models are in
+[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) (T4, T11).
 
 ## Testing
 
@@ -407,19 +274,22 @@ $ make hostile-rss       # peak memory on hand-built hostile files (needs /usr/b
 $ ./scripts/loc.sh       # line counts (shipped source vs tests)
 ```
 
+CI (`.github/workflows/ci.yml`) runs `make check` on Ubuntu and macOS, then
+`make demo` and a short benchmark smoke run.
+
 | suite | what it proves |
 |-------|----------------|
 | unit tests (48, in `src/`) | primitives: cursor bounds, CRC vectors, calendar math, value rendering, filters, mapping, stats, node-budget accounting |
 | `tests/golden.rs` (11) | byte-level agreement with the reference parser on 4,805 records |
 | `tests/synthetic.rs` (13) | hand-assembled chunks for every token type, nested BinXML, arrays, limits, hostile expansions, resync, CRC policies |
-| `tests/budget.rs` (1, plus 2 ignored measurement tools) | samples fit budgets 100x/20x below the defaults; writes the hostile files for `make hostile-rss` |
+| `tests/budget.rs` (1 test, plus 2 `#[ignore]`d measurement tools) | samples fit budgets 100x/20x below the defaults; writes the hostile files for `make hostile-rss` |
 | `tests/corruption.rs` (8) | proptest: mutated real logs, random token streams, random bytes never panic; CRC32 = `crc32fast`; glob = regex |
 | `tests/pipeline.rs` (3) | parallel = sequential output; sink errors stop workers |
-| `tests/cli.rs` (12) | every subcommand end to end, exit codes, closed pipes, logging, the fix-round-1 hostile file |
+| `tests/cli.rs` (12) | every subcommand end to end, exit codes, closed pipes, logging, a hostile node-budget file |
 
-Line coverage from `make check` in a fresh clone (two runs in fix round 1):
-**97.85–97.87 %** of 3,760 lines (this includes unit-test code that lives in `src/`);
-`make coverage-shipped`: **90.50 %** of 2,831 shipped lines (it varies by a few
+Line coverage from `make check` in a fresh clone:
+**97.7 %** of 3,776 lines (this includes unit-test code that lives in `src/`);
+`make coverage-shipped`: **90.1 %** of 2,844 shipped lines (it varies by a few
 tenths across runs, because proptest draws new random inputs each run).
 `scripts/loc.sh`: 5,035 lines of non-test source (3,894 code lines), 3,349
 lines of tests and benchmark code (1,196 of them unit tests inside `src/`).
@@ -440,9 +310,8 @@ that shape behaviour:
   depth ≤ 64, O(chunk) resync, bounded pipeline window, and a node budget that
   charges every created or cloned node its full deep size: ≤ 100 000 units
   per record and ≤ 1 000 000 per chunk (a unit is a node or 64 payload bytes).
-  The first version charged array copies too little; a reviewer's crafted
-  68 KB file reached 937 MB before fix round 1 (see *Memory under hostile
-  input*). See
+  Array copies are charged their full deep size before they are cloned. See
+  *Memory under hostile input* and
   [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 * **Typed tree, two output shapes.** The tree keeps value types, so JSONL has
   native numbers (`"EventID":4624`) while the flat `fields` view is all text
@@ -478,9 +347,8 @@ that shape behaviour:
   4688/4689/5156, PowerShell 4103/4104).
 * Fuzzing is proptest-based (256 cases per property per run plus an
   exhaustive byte-flip sweep), not coverage-guided fuzzing over CPU-days.
-* Benchmarks come from a shared, loaded laptop; see the caveats above.
-* CI (`.github/workflows/ci.yml`) mirrors `make check` but has never run: the
-  repository has not been pushed anywhere yet.
+* Benchmark figures come from one machine; re-run `./scripts/bench.sh` for
+  your own.
 
 ## Roadmap
 

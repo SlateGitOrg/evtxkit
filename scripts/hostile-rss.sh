@@ -4,7 +4,7 @@
 #   scripts/hostile-rss.sh                     this checkout's release build, all files
 #   EVTXKIT_BIN=/path/evtxkit SET=small scripts/hostile-rss.sh
 #                                              another build (e.g. one made from commit
-#                                              0a97b0a, before fix round 1); SET=small
+#                                              0a97b0a, before the node budgets); SET=small
 #                                              skips the files that need many GB there
 #
 # File shapes are documented in tests/common/hostile.rs. "stalled" runs pipe

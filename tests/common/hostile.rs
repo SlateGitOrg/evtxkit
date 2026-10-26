@@ -5,8 +5,8 @@
 use super::builder::{ChunkBuilder, Val, v_str, v_u8_array};
 
 /// `<E>%0<F>%1 x50</F></E>`, `%0` = UInt8 array of `items`, `%1` = a BinXML
-/// value of 1,000 empty elements. Before fix round 1 every array copy was
-/// charged 3 nodes but deep-cloned ~50,000.
+/// value of 1,000 empty elements. Every array copy is charged its full deep
+/// size (~50,000 units), not just its 3 direct nodes.
 pub fn array_clone_bomb(items: usize) -> Vec<u8> {
     let mut b = ChunkBuilder::new();
     b.record(1, |b| {
@@ -47,7 +47,7 @@ fn wide_def(b: &mut ChunkBuilder) {
 }
 
 /// One record holding `instances` template instances of [`wide_def`].
-/// Before fix round 1 each instance had its own fresh node budget.
+/// All instances share one per-record node budget.
 pub fn multi_instance_bomb(instances: usize) -> Vec<u8> {
     let mut b = ChunkBuilder::new();
     b.record(1, |b| {
